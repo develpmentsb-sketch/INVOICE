@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Payment Collection Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy: #1f3a5f;
+    --navy-dark: #17293f;
+    --teal: #17a398;
+    --amber: #e8a33d;
+    --red: #d64550;
+    --green: #2e9e5b;
+    --bg: #f2f5f8;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+  .hidden{display:none !important;}
+
+  /* ---------- login screen ---------- */
+  #loginScreen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--navy-dark);
+  }
+  .login-card{
+    background:#fff;border-radius:10px;padding:32px 30px;width:100%;max-width:340px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  .login-card h2{margin:0 0 4px;font-size:19px;color:var(--navy-dark);}
+  .login-card p{margin:0 0 20px;font-size:13px;color:var(--muted);}
+  .login-card label{font-size:12px;color:var(--muted);display:block;margin:12px 0 4px;}
+  .login-card input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;}
+  .login-card button{
+    width:100%;margin-top:18px;padding:10px;border:none;border-radius:6px;background:var(--navy);
+    color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+  }
+  .login-card button:hover{background:var(--navy-dark);}
+  .login-err{color:var(--red);font-size:12px;margin-top:10px;min-height:14px;}
+
+  /* ---------- top bar ---------- */
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+  .brand{display:flex;align-items:baseline;gap:8px;}
+  .brand h1{font-size:20px;margin:0;font-weight:700;color:var(--navy-dark);}
+  .brand span{font-size:12px;color:var(--muted);}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .filters select, .filters input{font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);}
+  .btn{font-size:13px;padding:7px 14px;border:none;border-radius:6px;background:var(--navy);color:#fff;cursor:pointer;}
+  .btn:hover{background:var(--navy-dark);}
+  .btn.secondary{background:#fff;color:var(--navy);border:1px solid var(--border);}
+  .btn.secondary:hover{background:#f1f5f9;}
+  .btn.danger{background:#fff;color:var(--red);border:1px solid #f3c6ca;}
+  .btn.danger:hover{background:#fbe6e8;}
+  .role-badge{font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 9px;border-radius:20px;letter-spacing:.03em;}
+  .role-badge.admin{background:#e3ecf6;color:var(--navy);}
+  .role-badge.user{background:#e3f6ea;color:var(--green);}
+  .role-badge.viewer{background:#f1f5f9;color:var(--muted);}
+  .who{font-size:12px;color:var(--muted);}
+
+  .section-header{background:var(--navy);color:#fff;font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:10px 16px;border-radius:6px;margin:26px 0 14px;display:flex;justify-content:space-between;align-items:center;}
+  .section-header .btn{padding:5px 12px;}
+
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  @media (max-width:900px){.cards{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:520px){.cards{grid-template-columns:1fr;}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 18px;}
+  .card .label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;}
+  .card .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .card .sub{font-size:11px;color:var(--muted);margin-top:2px;}
+  .card .value{font-size:26px;font-weight:700;margin-top:8px;color:var(--navy-dark);}
+  .card .delta{font-size:12px;margin-top:4px;font-weight:600;}
+  .delta.good{color:var(--green);}
+  .delta.bad{color:var(--red);}
+
+  .breakdown{display:grid;grid-template-columns:340px 1fr;gap:16px;}
+  @media (max-width:820px){.breakdown{grid-template-columns:1fr;}}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;}
+  .panel h3{margin:0 0 4px;font-size:13px;color:var(--navy-dark);}
+  .panel .hint{font-size:11px;color:var(--muted);margin-bottom:10px;}
+  .donut-wrap{position:relative;width:210px;height:210px;margin:6px auto 10px;}
+  .donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
+  .donut-center .t{font-size:11px;color:var(--muted);}
+  .donut-center .v{font-size:20px;font-weight:700;color:var(--navy-dark);}
+  .legend{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
+  .legend-item{display:flex;align-items:center;justify-content:space-between;font-size:13px;}
+  .legend-left{display:flex;align-items:center;gap:8px;}
+  .swatch{width:10px;height:10px;border-radius:2px;}
+  .legend-val{font-weight:600;color:var(--navy-dark);}
+  .legend-pct{color:var(--muted);font-size:12px;margin-left:6px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);border-bottom:1px solid var(--border);padding:8px 10px;}
+  tbody td{padding:10px;border-bottom:1px solid var(--border);color:var(--text);}
+  tbody tr:hover{background:#f8fafc;}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.paid{background:#e3f6ea;color:var(--green);}
+  .badge.partial{background:#fdf1de;color:var(--amber);}
+  .badge.unpaid{background:#fbe6e8;color:var(--red);}
+  .badge.overdue{background:#fbe6e8;color:var(--red);}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .empty, .err{padding:30px;text-align:center;color:var(--muted);font-size:13px;}
+  .err{color:var(--red);}
+  .row-actions{display:flex;gap:6px;}
+  .row-actions button{font-size:11px;padding:4px 9px;border-radius:5px;border:1px solid var(--border);background:#fff;cursor:pointer;}
+  .row-actions button.del{color:var(--red);border-color:#f3c6ca;}
+
+  /* ---------- modal ---------- */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:50;}
+  .modal{background:#fff;border-radius:10px;padding:24px;width:100%;max-width:420px;}
+  .modal h3{margin:0 0 16px;font-size:16px;color:var(--navy-dark);}
+  .modal label{font-size:12px;color:var(--muted);display:block;margin:10px 0 4px;}
+  .modal input, .modal select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+  .modal-err{color:var(--red);font-size:12px;margin-top:8px;min-height:14px;}
+
+  /* ---------- admin users panel ---------- */
+  .user-form{display:grid;grid-template-columns:1fr 1fr 140px auto;gap:8px;margin-bottom:16px;}
+  @media (max-width:700px){.user-form{grid-template-columns:1fr;}}
+  .user-form input, .user-form select{padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;}
+  .user-list{font-size:13px;}
+  .user-list tr td{padding:8px 10px;}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN SCREEN ================= -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h2>Payment Collection</h2>
+    <p>Sign in to the SGB admin dashboard</p>
+    <label>Email</label>
+    <input type="email" id="loginEmail" autocomplete="username" />
+    <label>Password</label>
+    <input type="password" id="loginPassword" autocomplete="current-password" />
+    <button id="loginBtn">Sign in</button>
+    <div class="login-err" id="loginErr"></div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:14px;" id="loadStatus">Loading…</div>
+  </div>
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+<div class="wrap hidden" id="dashboard">
+
+  <div class="topbar">
+    <div class="brand">
+      <h1>Payment Collection</h1>
+      <span>Invoice-wise · SGB Admin</span>
+    </div>
+    <div class="filters">
+      <span class="who" id="whoLabel"></span>
+      <span class="role-badge" id="roleBadge"></span>
+      <select id="statusFilter">
+        <option value="all">All statuses</option>
+        <option value="paid">Paid</option>
+        <option value="partial">Partial</option>
+        <option value="unpaid">Unpaid</option>
+        <option value="overdue">Overdue only</option>
+      </select>
+      <input type="text" id="searchBox" placeholder="Search invoice # / customer" />
+      <button class="btn secondary" id="refreshBtn">Refresh</button>
+      <button class="btn secondary" id="logoutBtn">Log out</button>
+    </div>
+  </div>
+
+  <div class="section-header">Collection · Overview</div>
+  <div class="cards" id="summaryCards">
+    <div class="card">
+      <div class="label"><span class="dot" style="background:var(--navy)"></span>Total Invoiced</div>
+      <div class="sub">All invoices</div>
+      <div class="value" id="cardTotal">–</div>
+    </div>
+    <div class="card">
+      <div class="label"><span class="dot" style="background:var(--green)"></span>Collected</div>
+      <div class="sub">Payments received</div>
+      <div class="value" id="cardCollected">–</div>
+      <div class="delta good" id="cardCollectedPct"></div>
+    </div>
+    <div class="card">
+      <div class="label"><span class="dot" style="background:var(--amber)"></span>Outstanding</div>
+      <div class="sub">Not yet collected</div>
+      <div class="value" id="cardOutstanding">–</div>
+      <div class="delta" id="cardOutstandingPct"></div>
+    </div>
+    <div class="card">
+      <div class="label"><span class="dot" style="background:var(--red)"></span>Overdue</div>
+      <div class="sub">Past due date, unpaid balance</div>
+      <div class="value" id="cardOverdue">–</div>
+      <div class="delta bad" id="cardOverdueCount"></div>
+    </div>
+  </div>
+
+  <div class="section-header">Collection Status Breakdown</div>
+  <div class="breakdown">
+    <div class="panel">
+      <h3>Paid / Partial / Unpaid</h3>
+      <div class="hint">By invoice count</div>
+      <div class="donut-wrap">
+        <canvas id="statusDonut"></canvas>
+        <div class="donut-center"><div class="t">total</div><div class="v" id="donutTotal">–</div></div>
+      </div>
+      <div class="legend" id="donutLegend"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h3>Invoices</h3>
+          <div class="hint" id="tableHint">Loading…</div>
+        </div>
+        <button class="btn editor-only hidden" id="addInvoiceBtn">+ Add invoice</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Invoice #</th><th>Customer</th><th>Due date</th>
+              <th class="num">Amount</th><th class="num">Paid</th><th class="num">Balance</th>
+              <th>Status</th><th class="editor-only hidden">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="invoiceRows"><tr><td colspan="8" class="empty">Loading invoices…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ADMIN: MANAGE USERS ================= -->
+  <div id="adminSection" class="hidden">
+    <div class="section-header">Admin · Create Login</div>
+    <div class="panel">
+      <div class="hint" style="margin-bottom:12px;">Creates a new email/password login and assigns its role. Only admins can do this.</div>
+      <div class="user-form">
+        <input type="email" id="newUserEmail" placeholder="Email" />
+        <input type="password" id="newUserPassword" placeholder="Password (min 8 chars)" />
+        <select id="newUserRole">
+          <option value="viewer">Viewer</option>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="btn" id="createUserBtn">Create</button>
+      </div>
+      <div class="modal-err" id="createUserErr"></div>
+      <table class="user-list">
+        <thead><tr><th>Email</th><th>Role</th></tr></thead>
+        <tbody id="userRows"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= INVOICE MODAL ================= -->
+<div class="modal-backdrop hidden" id="invoiceModalBackdrop">
+  <div class="modal">
+    <h3 id="invoiceModalTitle">Add invoice</h3>
+    <input type="hidden" id="invoiceId" />
+    <label>Invoice number</label>
+    <input type="text" id="fInvoiceNumber" />
+    <label>Customer name</label>
+    <input type="text" id="fCustomerName" />
+    <label>Invoice date</label>
+    <input type="date" id="fInvoiceDate" />
+    <label>Due date</label>
+    <input type="date" id="fDueDate" />
+    <label>Amount</label>
+    <input type="number" id="fAmount" step="0.01" min="0" />
+    <label>Amount paid</label>
+    <input type="number" id="fAmountPaid" step="0.01" min="0" />
+    <div class="modal-err" id="invoiceModalErr"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="invoiceModalCancel">Cancel</button>
+      <button class="btn" id="invoiceModalSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   SUPABASE CONFIG — replace with your project's values.
+   Use the anon/public key only (never the service_role key) here.
+------------------------------------------------------------------- */
+const SUPABASE_URL = "https://gsyislhunusnycgtnlfw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzeWlzbGh1bnVzbnljZ3RubGZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNzc1MTUsImV4cCI6MjEwMjk1MzUxNX0.TXidfznSPnqgRkPn4BpgT-5Uc34Rf4fu-UYKR9YvkAY";
+// The Edge Function endpoint (Project Settings → API gives you the URL base).
+const CREATE_USER_FN_URL = `${SUPABASE_URL}/functions/v1/admin-create-user`;
+
+// In-memory storage adapter — avoids touching localStorage entirely, so this
+// works even on file:// pages where browsers may block storage access.
+// Note: with this adapter, your session will NOT persist across a page reload;
+// you'll need to sign in again each time you open the file. Once this is
+// served over http(s) instead of file://, you can switch back to normal
+// localStorage-backed persistence if you want reload-persistence.
+const memoryStorage = (() => {
+  const store = {};
+  return {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => { store[key] = value; },
+    removeItem: (key) => { delete store[key]; },
+  };
+})();
+
+let supabase;
+try {
+  if (!window.supabase) throw new Error("Supabase library did not load (window.supabase is missing) — likely blocked by network or an extension.");
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storage: memoryStorage, persistSession: true, autoRefreshToken: true },
+  });
+  document.getElementById("loadStatus").textContent = "Ready — client initialized OK.";
+  document.getElementById("loadStatus").style.color = "#2e9e5b";
+} catch (e) {
+  document.body.innerHTML =
+    '<div style="padding:40px;font-family:sans-serif;color:#d64550;">' +
+    '<h2>Failed to initialize Supabase client</h2><p>' +
+    (e && e.message ? e.message : String(e)) + '</p></div>';
+  throw e;
+}
+const fmt = (n) => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
+let allInvoices = [];
+let donutChart = null;
+let currentSession = null;
+let currentRole = null; // 'admin' | 'user' | 'viewer'
+
+/* ---------------- AUTH ---------------- */
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s — likely a network/CORS block, or something on this machine is blocking the request.`)), ms)
+    ),
+  ]);
+}
+
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const errEl = document.getElementById("loginErr");
+  const btn = document.getElementById("loginBtn");
+  errEl.style.color = "";
+  errEl.textContent = "";
+  if (!email || !password) { errEl.textContent = "Please enter both email and password."; return; }
+  btn.disabled = true;
+  btn.textContent = "Signing in...";
+  try {
+    const { data, error } = await withTimeout(
+      supabase.auth.signInWithPassword({ email, password }),
+      8000,
+      "Sign-in request"
+    );
+    if (error) {
+      errEl.textContent = "Supabase error: " + error.message + " (status: " + (error.status || "n/a") + ")";
+      return;
+    }
+    if (!data || !data.session) {
+      errEl.textContent = "Sign-in returned no session — unexpected response.";
+      return;
+    }
+    await onSignedIn(data.session);
+  } catch (e) {
+    errEl.textContent = "Unexpected error: " + (e && e.message ? e.message : String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Sign in";
+  }
+});
+
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await supabase.auth.signOut();
+  currentSession = null;
+  currentRole = null;
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("loginScreen").classList.remove("hidden");
+});
+
+async function onSignedIn(session) {
+  currentSession = session;
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role, email")
+    .eq("id", session.user.id)
+    .single();
+
+  if (error || !profile) {
+    document.getElementById("loginErr").textContent = "No profile found for this account — ask an admin to set your role.";
+    return;
+  }
+
+  currentRole = profile.role;
+  document.getElementById("loginScreen").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+  document.getElementById("whoLabel").textContent = profile.email || session.user.email;
+  const badge = document.getElementById("roleBadge");
+  badge.textContent = currentRole;
+  badge.className = "role-badge " + currentRole;
+
+  const canEdit = currentRole === "admin" || currentRole === "user";
+  document.querySelectorAll(".editor-only").forEach((el) => el.classList.toggle("hidden", !canEdit));
+
+  if (currentRole === "admin") {
+    document.getElementById("adminSection").classList.remove("hidden");
+    loadUsers();
+  }
+
+  fetchInvoices();
+}
+
+// Restore session on page load (refresh-safe)
+supabase.auth.getSession().then(({ data }) => {
+  if (data.session) onSignedIn(data.session);
+}).catch((e) => {
+  console.warn("getSession failed (safe to ignore on first load):", e);
+});
+
+/* ---------------- INVOICE STATUS HELPERS ---------------- */
+
+function deriveStatus(inv) {
+  const paid = Number(inv.amount_paid || 0);
+  const amount = Number(inv.amount || 0);
+  const dueDate = inv.due_date ? new Date(inv.due_date) : null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isOverdue = dueDate && dueDate < today && paid < amount;
+  const status = paid >= amount ? "paid" : (paid > 0 ? "partial" : "unpaid");
+  return { status, isOverdue, balance: amount - paid };
+}
+
+/* ---------------- FETCH + RENDER ---------------- */
+
+async function fetchInvoices() {
+  const tableHint = document.getElementById("tableHint");
+  const rows = document.getElementById("invoiceRows");
+  tableHint.textContent = "Loading…";
+  rows.innerHTML = `<tr><td colspan="8" class="empty">Loading invoices…</td></tr>`;
+
+  let { data, error } = await supabase.from("invoice_status_view").select("*").order("due_date", { ascending: true });
+
+  if (error) {
+    const fallback = await supabase.from("invoices").select("*").order("due_date", { ascending: true });
+    if (fallback.error) {
+      rows.innerHTML = `<tr><td colspan="8" class="err">Couldn't load invoices: ${fallback.error.message}</td></tr>`;
+      tableHint.textContent = "Error";
+      return;
+    }
+    data = fallback.data.map((inv) => {
+      const d = deriveStatus(inv);
+      return { ...inv, status: d.status, is_overdue: d.isOverdue, balance_due: d.balance };
+    });
+  }
+
+  allInvoices = data || [];
+  tableHint.textContent = `${allInvoices.length} invoice${allInvoices.length === 1 ? "" : "s"}`;
+  renderAll();
+}
+
+function renderCards(list) {
+  const total = list.reduce((s, i) => s + Number(i.amount || 0), 0);
+  const collected = list.reduce((s, i) => s + Number(i.amount_paid || 0), 0);
+  const outstanding = total - collected;
+  const overdueList = list.filter((i) => i.is_overdue);
+  const overdueAmt = overdueList.reduce((s, i) => s + Number(i.balance_due ?? (i.amount - i.amount_paid)), 0);
+
+  document.getElementById("cardTotal").textContent = fmt(total);
+  document.getElementById("cardCollected").textContent = fmt(collected);
+  document.getElementById("cardOutstanding").textContent = fmt(outstanding);
+  document.getElementById("cardOverdue").textContent = fmt(overdueAmt);
+  document.getElementById("cardCollectedPct").textContent = total ? `${((collected/total)*100).toFixed(0)}% of total invoiced` : "";
+  document.getElementById("cardOutstandingPct").textContent = total ? `${((outstanding/total)*100).toFixed(0)}% of total invoiced` : "";
+  document.getElementById("cardOverdueCount").textContent = `${overdueList.length} invoice${overdueList.length === 1 ? "" : "s"} overdue`;
+}
+
+function renderDonut(list) {
+  const counts = { paid: 0, partial: 0, unpaid: 0 };
+  list.forEach((i) => { counts[i.status] = (counts[i.status] || 0) + 1; });
+  const total = list.length;
+  document.getElementById("donutTotal").textContent = total;
+  const colors = { paid: "#2e9e5b", partial: "#e8a33d", unpaid: "#d64550" };
+  const labels = { paid: "Paid", partial: "Partial", unpaid: "Unpaid" };
+
+  const ctx = document.getElementById("statusDonut").getContext("2d");
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(ctx, {
+    type: "doughnut",
+    data: { labels: Object.keys(counts).map((k) => labels[k]),
+      datasets: [{ data: Object.values(counts), backgroundColor: Object.keys(counts).map((k) => colors[k]), borderWidth: 2, borderColor: "#fff" }] },
+    options: { cutout: "70%", plugins: { legend: { display: false }, tooltip: { enabled: true } } },
+  });
+
+  document.getElementById("donutLegend").innerHTML = Object.keys(counts).map((k) => {
+    const pct = total ? ((counts[k]/total)*100).toFixed(0) : 0;
+    return `<div class="legend-item"><div class="legend-left"><span class="swatch" style="background:${colors[k]}"></span>${labels[k]}</div>
+      <div><span class="legend-val">${counts[k]}</span><span class="legend-pct">${pct}%</span></div></div>`;
+  }).join("");
+}
+
+function renderTable(list) {
+  const rows = document.getElementById("invoiceRows");
+  const canEdit = currentRole === "admin" || currentRole === "user";
+  if (!list.length) { rows.innerHTML = `<tr><td colspan="8" class="empty">No invoices match this view.</td></tr>`; return; }
+  rows.innerHTML = list.map((inv) => {
+    const badgeClass = inv.is_overdue ? "overdue" : inv.status;
+    const badgeLabel = inv.is_overdue ? "Overdue" : (inv.status.charAt(0).toUpperCase() + inv.status.slice(1));
+    const balance = inv.balance_due ?? (inv.amount - inv.amount_paid);
+    const actions = canEdit ? `<td class="row-actions">
+        <button onclick="openInvoiceModal('${inv.id}')">Edit</button>
+        <button class="del" onclick="deleteInvoice('${inv.id}')">Delete</button>
+      </td>` : "";
+    return `<tr>
+      <td>${inv.invoice_number ?? "–"}</td><td>${inv.customer_name ?? "–"}</td><td>${inv.due_date ?? "–"}</td>
+      <td class="num">${fmt(inv.amount)}</td><td class="num">${fmt(inv.amount_paid)}</td><td class="num">${fmt(balance)}</td>
+      <td><span class="badge ${badgeClass}">${badgeLabel}</span></td>${actions}
+    </tr>`;
+  }).join("");
+}
+
+function applyFilters() {
+  const statusFilter = document.getElementById("statusFilter").value;
+  const search = document.getElementById("searchBox").value.trim().toLowerCase();
+  return allInvoices.filter((inv) => {
+    if (statusFilter === "overdue" && !inv.is_overdue) return false;
+    if (statusFilter !== "all" && statusFilter !== "overdue" && inv.status !== statusFilter) return false;
+    if (search) {
+      const hay = `${inv.invoice_number ?? ""} ${inv.customer_name ?? ""}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function renderAll() {
+  const filtered = applyFilters();
+  renderCards(filtered);
+  renderDonut(filtered);
+  renderTable(filtered);
+}
+
+document.getElementById("statusFilter").addEventListener("change", renderAll);
+document.getElementById("searchBox").addEventListener("input", renderAll);
+document.getElementById("refreshBtn").addEventListener("click", fetchInvoices);
+
+/* ---------------- INVOICE ADD / EDIT / DELETE ---------------- */
+
+function openInvoiceModal(id) {
+  document.getElementById("invoiceModalErr").textContent = "";
+  document.getElementById("invoiceId").value = id || "";
+  if (id) {
+    const inv = allInvoices.find((i) => i.id === id);
+    document.getElementById("invoiceModalTitle").textContent = "Edit invoice";
+    document.getElementById("fInvoiceNumber").value = inv.invoice_number || "";
+    document.getElementById("fCustomerName").value = inv.customer_name || "";
+    document.getElementById("fInvoiceDate").value = inv.invoice_date || "";
+    document.getElementById("fDueDate").value = inv.due_date || "";
+    document.getElementById("fAmount").value = inv.amount ?? "";
+    document.getElementById("fAmountPaid").value = inv.amount_paid ?? "";
+  } else {
+    document.getElementById("invoiceModalTitle").textContent = "Add invoice";
+    ["fInvoiceNumber","fCustomerName","fInvoiceDate","fDueDate","fAmount","fAmountPaid"].forEach((id) => document.getElementById(id).value = "");
+  }
+  document.getElementById("invoiceModalBackdrop").classList.remove("hidden");
+}
+window.openInvoiceModal = openInvoiceModal;
+
+document.getElementById("addInvoiceBtn").addEventListener("click", () => openInvoiceModal(null));
+document.getElementById("invoiceModalCancel").addEventListener("click", () => document.getElementById("invoiceModalBackdrop").classList.add("hidden"));
+
+document.getElementById("invoiceModalSave").addEventListener("click", async () => {
+  const errEl = document.getElementById("invoiceModalErr");
+  errEl.textContent = "";
+  const id = document.getElementById("invoiceId").value;
+  const payload = {
+    invoice_number: document.getElementById("fInvoiceNumber").value.trim(),
+    customer_name: document.getElementById("fCustomerName").value.trim(),
+    invoice_date: document.getElementById("fInvoiceDate").value,
+    due_date: document.getElementById("fDueDate").value,
+    amount: Number(document.getElementById("fAmount").value || 0),
+    amount_paid: Number(document.getElementById("fAmountPaid").value || 0),
+  };
+  if (!payload.invoice_number || !payload.customer_name || !payload.invoice_date || !payload.due_date) {
+    errEl.textContent = "Please fill in all fields."; return;
+  }
+
+  const { error } = id
+    ? await supabase.from("invoices").update(payload).eq("id", id)
+    : await supabase.from("invoices").insert(payload);
+
+  if (error) { errEl.textContent = error.message; return; }
+  document.getElementById("invoiceModalBackdrop").classList.add("hidden");
+  fetchInvoices();
+});
+
+async function deleteInvoice(id) {
+  if (!confirm("Delete this invoice? This cannot be undone.")) return;
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  if (error) { alert("Couldn't delete: " + error.message); return; }
+  fetchInvoices();
+}
+window.deleteInvoice = deleteInvoice;
+
+/* ---------------- ADMIN: CREATE USER ---------------- */
+
+async function loadUsers() {
+  const rows = document.getElementById("userRows");
+  const { data, error } = await supabase.from("profiles").select("email, role").order("email");
+  if (error) { rows.innerHTML = `<tr><td colspan="2" class="err">${error.message}</td></tr>`; return; }
+  rows.innerHTML = (data || []).map((u) => `<tr><td>${u.email ?? "–"}</td><td><span class="role-badge ${u.role}">${u.role}</span></td></tr>`).join("")
+    || `<tr><td colspan="2" class="empty">No users yet.</td></tr>`;
+}
+
+document.getElementById("createUserBtn").addEventListener("click", async () => {
+  const errEl = document.getElementById("createUserErr");
+  errEl.textContent = "";
+  const email = document.getElementById("newUserEmail").value.trim();
+  const password = document.getElementById("newUserPassword").value;
+  const role = document.getElementById("newUserRole").value;
+  if (!email || !password) { errEl.textContent = "Email and password are required."; return; }
+
+  try {
+    const res = await fetch(CREATE_USER_FN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${currentSession.access_token}`,
+      },
+      body: JSON.stringify({ email, password, role }),
+    });
+    const result = await res.json();
+    if (!res.ok) { errEl.textContent = result.error || "Couldn't create user."; return; }
+    document.getElementById("newUserEmail").value = "";
+    document.getElementById("newUserPassword").value = "";
+    loadUsers();
+  } catch (e) {
+    errEl.textContent = "Request failed: " + e.message;
+  }
+});
+</script>
+</body>
+</html>
